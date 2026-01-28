@@ -69,7 +69,7 @@ func (b *ReadBuf) IrregularInt16(step Step, order binary.ByteOrder, size int) (i
 	if err != nil {
 		return 0, err
 	}
-	return b.sliceToUint16(value, order)
+	return b.sliceToInt16(value, order)
 }
 
 // SkipInt16 获取一个int16 读索引推进2
