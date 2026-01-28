@@ -2,6 +2,7 @@ package small_kit
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"sync"
 	"unsafe"
@@ -30,6 +31,7 @@ type ReadBuf struct {
 	lock     sync.Mutex
 }
 
+
 // Int8 获取一个int8 int8   范围 -128 到 127
 func (b *ReadBuf) Int8(step Step) (int8, error) {
 	value, err := b.Byte(step)
@@ -39,13 +41,44 @@ func (b *ReadBuf) Int8(step Step) (int8, error) {
 	return int8(value), nil
 }
 
+
+func (b *ReadBuf) flushArraySize(value []byte, size int) []byte {
+	currentLen := len(value)
+	if currentLen >= size {
+		return value[:size]
+	}
+	// 一次性分配足够的空间
+	result := make([]byte, size)
+	copy(result, value)
+	// 不需要显式填充0，因为make已经初始化了
+	return result
+}
+
+func (b *ReadBuf) flushArray(step Step, size int, typeSize int) ([]byte, error) {
+	value, err := b.Bytes(step, size)
+	if err != nil {
+		return nil, err
+	}
+	value = b.flushArraySize(value, typeSize)
+	return value, nil
+}
+
+//处理不是特定长度的int16,就是长度可能是3，可能是1，然后将结果转成int16
+func (b *ReadBuf) IrregularInt16(step Step, order binary.ByteOrder, size int) (int16, error) {
+	value, err := b.flushArray(step, size, 2)
+	if err != nil {
+		return 0, err
+	}
+	return b.sliceToUint16(value, order)
+}
+
 // SkipInt16 获取一个int16 读索引推进2
 func (b *ReadBuf) SkipInt16(order binary.ByteOrder) (int16, error) {
 	value, err := b.Bytes(StepOn, 2)
 	if err != nil {
 		return 0, err
 	}
-	return b.sliceToUint16(value, order)
+	return b.sliceToInt16(value, order)
 }
 
 // Int16 获取一个int16，读索引不推进
@@ -54,10 +87,10 @@ func (b *ReadBuf) Int16(order binary.ByteOrder) (int16, error) {
 	if err != nil {
 		return 0, err
 	}
-	return b.sliceToUint16(value, order)
+	return b.sliceToInt16(value, order)
 }
 
-func (b *ReadBuf) sliceToUint16(value []byte, order binary.ByteOrder) (int16, error) {
+func (b *ReadBuf) sliceToInt16(value []byte, order binary.ByteOrder) (int16, error) {
 	if order == binary.BigEndian {
 		//大端
 		return int16(value[0])<<8 | int16(value[1]), nil
@@ -66,13 +99,22 @@ func (b *ReadBuf) sliceToUint16(value []byte, order binary.ByteOrder) (int16, er
 	return int16(value[1])<<8 | int16(value[0]), nil
 }
 
+//处理不是特定长度的int32,就是长度可能是3，可能是5，然后将结果转成int32
+func (b *ReadBuf) IrregularInt32(step Step, order binary.ByteOrder, size int) (int32, error) {
+	value, err := b.flushArray(step, size, 4)
+	if err != nil {
+		return 0, err
+	}
+	return b.sliceToInt32(value, order)
+}
+
 // SkipInt32 获取一个int32，读索引推进4
 func (b *ReadBuf) SkipInt32(order binary.ByteOrder) (int32, error) {
 	value, err := b.Bytes(StepOn, 4)
 	if err != nil {
 		return 0, err
 	}
-	return b.sliceToUint32(value, order)
+	return b.sliceToInt32(value, order)
 }
 
 // Int32 获取一个int32，读索引不推进
@@ -81,16 +123,25 @@ func (b *ReadBuf) Int32(order binary.ByteOrder) (int32, error) {
 	if err != nil {
 		return 0, err
 	}
-	return b.sliceToUint32(value, order)
+	return b.sliceToInt32(value, order)
 }
 
-func (b *ReadBuf) sliceToUint32(value []byte, order binary.ByteOrder) (int32, error) {
+func (b *ReadBuf) sliceToInt32(value []byte, order binary.ByteOrder) (int32, error) {
 	if order == binary.BigEndian {
 		//大端
 		return int32(value[0])<<24 | int32(value[1])<<16 | int32(value[2])<<8 | int32(value[3]), nil
 	}
 	//小端
 	return int32(value[3])<<24 | int32(value[2])<<16 | int32(value[1])<<8 | int32(value[0]), nil
+}
+
+//处理不是特定长度的int64,就是长度可能是3，可能是5，然后将结果转成int64
+func (b *ReadBuf) IrregularInt64(step Step, order binary.ByteOrder, size int) (int64, error) {
+	value, err := b.flushArray(step, size, 8)
+	if err != nil {
+		return 0, err
+	}
+	return b.sliceToInt64(value, order)
 }
 
 // SkipInt64 获取一个int64, 读索引推进8
@@ -122,6 +173,15 @@ func (b *ReadBuf) sliceToInt64(value []byte, order binary.ByteOrder) (int64, err
 		int64(value[3])<<24 | int64(value[2])<<16 | int64(value[1])<<8 | int64(value[0]), nil
 }
 
+//处理不是特定长度的Uint16,就是长度可能是3，可能是5，然后将结果转成int16
+func (b *ReadBuf) IrregularUint16(step Step, order binary.ByteOrder, size int) (uint16, error) {
+	value, err := b.flushArray(step, size, 2)
+	if err != nil {
+		return 0, err
+	}
+	return order.Uint16(value[:]), nil
+}
+
 // SkipUint16 获取一个uint16；读索引推进2
 func (b *ReadBuf) SkipUint16(order binary.ByteOrder) (uint16, error) {
 	value, err := b.Bytes(StepOn, 2)
@@ -140,6 +200,15 @@ func (b *ReadBuf) Uint16(order binary.ByteOrder) (uint16, error) {
 	return order.Uint16(value[:]), nil
 }
 
+//处理不是特定长度的Uint32,就是长度可能是3，可能是5，然后将结果转成int32
+func (b *ReadBuf) IrregularUint32(step Step, order binary.ByteOrder, size int) (uint32, error) {
+	value, err := b.flushArray(step, size, 4)
+	if err != nil {
+		return 0, err
+	}
+	return order.Uint32(value[:]), nil
+}
+
 // SkipUint32 uint32，读索引推进4
 func (b *ReadBuf) SkipUint32(order binary.ByteOrder) (uint32, error) {
 	value, err := b.Bytes(StepOn, 4)
@@ -156,6 +225,15 @@ func (b *ReadBuf) Uint32(order binary.ByteOrder) (uint32, error) {
 		return 0, err
 	}
 	return order.Uint32(value[:]), nil
+}
+
+//处理不是特定长度的Uint64,就是长度可能是3，可能是5，然后将结果转成int64
+func (b *ReadBuf) IrregularUint64(step Step, order binary.ByteOrder, size int) (uint64, error) {
+	value, err := b.flushArray(step, size, 8)
+	if err != nil {
+		return 0, err
+	}
+	return order.Uint64(value[:]), nil
 }
 
 // SkipUint64 uint64，读索引推进8
@@ -217,6 +295,15 @@ func (b *ReadBuf) Float64(order binary.ByteOrder) (float64, error) {
 }
 
 // 读取指定长度的字符串
+func (b *ReadBuf) HexString(step Step, size int) (string, error) {
+	value, err := b.Bytes(step, size)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value), nil
+}
+
+// 读取指定长度的字符串
 func (b *ReadBuf) String(step Step, size int) (string, error) {
 	hex, err := b.Bytes(step, size)
 	if err != nil {
@@ -268,6 +355,7 @@ func (b *ReadBuf) Skip(size int) {
 	defer b.lock.Unlock()
 	b.step(StepOn, size)
 }
+
 
 // Flush 重置
 func (b *ReadBuf) Flush(data []byte) {
