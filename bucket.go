@@ -132,9 +132,9 @@ func (d *DataDistributor) Register(as DataAssociator) (send ReleaseFunc, clientI
 	defer d.lock.Unlock()
 	dr := &DataRegister{buckets: make(map[string][]string)}
 	as.Register(dr)
-	if len(dr.buckets) == 0 && dr.registerAll == false {
-		return nil, 0, fmt.Errorf("no buckets registered")
-	}
+	//if len(dr.buckets) == 0 && dr.registerAll == false {
+	//	return nil, 0, fmt.Errorf("no buckets registered")
+	//}
 	clientId = d.flushClientId()
 	if dr.registerAll == false {
 		//开始打点
