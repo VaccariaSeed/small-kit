@@ -2,7 +2,6 @@ package small_kit
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"sync"
 )
