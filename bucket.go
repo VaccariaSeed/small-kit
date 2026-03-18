@@ -3,6 +3,7 @@ package small_kit
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 )
 
@@ -54,7 +55,7 @@ func NewDataDistributor(bufferSize int) *DataDistributor {
 	if bufferSize <= 0 {
 		bufferSize = 10
 	}
-	return &DataDistributor{buckets: make(map[string]*bucket), clients: make(map[uint64]*client), bufferSize: bufferSize}
+	return &DataDistributor{buckets: make(map[string]*bucket), clients: make(map[uint64]*client), bufferSize: bufferSize, allRegisters: make(map[uint64]struct{})}
 }
 
 type bucket struct {
@@ -88,23 +89,53 @@ type DataDistributor struct {
 	buckets      map[string]*bucket
 	clients      map[uint64]*client
 	bufferSize   int
-	allRegisters []uint64
+	allRegisters map[uint64]struct{}
+}
+
+// ClearClients 清空所有客户端
+func (d *DataDistributor) ClearClients() {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	d.clients = make(map[uint64]*client)
+	d.allRegisters = make(map[uint64]struct{})
+	for _, kit := range d.buckets {
+		kit.lock.Lock()
+		kit.marking = make(map[string][]uint64)
+		kit.lock.Unlock()
+	}
+}
+
+// ClearClient 清空一个客户端
+func (d *DataDistributor) ClearClient(clientId uint64) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	delete(d.clients, clientId)
+	delete(d.allRegisters, clientId)
+	for _, kit := range d.buckets {
+		for key, res := range kit.marking {
+			if slices.Contains(res, clientId) {
+				kit.marking[key] = slices.DeleteFunc(res, func(v uint64) bool {
+					return v == clientId
+				})
+			}
+		}
+	}
 }
 
 // Register 注册一个客户机
 // 返回一个发布数据的方法
-func (d *DataDistributor) Register(as DataAssociator) (ReleaseFunc, error) {
+func (d *DataDistributor) Register(as DataAssociator) (send ReleaseFunc, clientId uint64, err error) {
 	if as == nil {
-		return nil, errors.New("DataAssociator is nil")
+		return nil, 0, errors.New("DataAssociator is nil")
 	}
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	dr := &DataRegister{buckets: make(map[string][]string)}
 	as.Register(dr)
 	if len(dr.buckets) == 0 && dr.registerAll == false {
-		return nil, fmt.Errorf("no buckets registered")
+		return nil, 0, fmt.Errorf("no buckets registered")
 	}
-	clientId := d.flushClientId()
+	clientId = d.flushClientId()
 	if dr.registerAll == false {
 		//开始打点
 		for bucketName, pointNames := range dr.buckets {
@@ -114,12 +145,12 @@ func (d *DataDistributor) Register(as DataAssociator) (ReleaseFunc, error) {
 			d.buckets[bucketName].mark(clientId, pointNames...)
 		}
 	} else {
-		d.allRegisters = append(d.allRegisters, clientId)
+		d.allRegisters[clientId] = struct{}{}
 	}
 	cli := &client{dc: make(chan []any, d.bufferSize), as: as}
 	go cli.flush()
 	d.clients[clientId] = cli
-	return d.release, nil
+	return d.release, clientId, nil
 }
 
 func (d *DataDistributor) flushClientId() uint64 {
@@ -163,7 +194,8 @@ func (d *DataDistributor) release(bucketName string, name string, value any) {
 	d.lock.Lock()
 	if _, ok := d.buckets[bucketName]; !ok {
 		d.buckets[bucketName] = &bucket{name: bucketName, value: make(map[string]any), marking: make(map[string][]uint64)}
-		for _, clientId := range d.allRegisters {
+		//没有桶，绑定全局订阅的客户端
+		for clientId := range d.allRegisters {
 			d.buckets[bucketName].mark(clientId, name)
 		}
 	}
