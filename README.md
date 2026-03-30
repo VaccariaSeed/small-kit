@@ -106,29 +106,40 @@ var f64 Float64 = 3.141592653589793
 ###### 使用教程
 1. 创建一个数据分发桶
 ```go
-tor := NewDataDistributor(消息通知的队列长度)
+tor := NewDistributor(消息通知的队列长度)
 ```
 2. 创建一个handler
 ```go
-type Handle1 struct {
-call ReleaseFunc
+
+var _ Scheduler = (*FirstScheduler)(nil)
+
+type FirstScheduler struct {
+*Operator
 }
 
-func (h *Handle1) Register(register *DataRegister) {
-//订阅某个桶里的某些数据
-register.Append("jojo2_1", "handle2_1", "handle2_2", "handle2_3")
-register.Append("jojo2_2", "handle2_1", "handle2_2", "handle2_3")
+func (f *FirstScheduler) Register(register *Register) {
+register.Create("first_bucket", false)
+register.Subscribe("second_bucket", "second_bucket_key1", "second_bucket_key2")
+register.SubscribeBucket("third_bucket")
+register.Switch("third_bucket_switch", "jojo")
 }
 
-func (h *Handle1) Received(bucket string, name string, value any) {
-fmt.Println("----------------handle1-------------------")
-fmt.Println(fmt.Sprintf("Handle1 收到: %s %s %d", bucket, name, value.(int64)))
+func (f *FirstScheduler) Received(bucketName string, name string, value any) {
+fmt.Printf("FirstClient Received bucket:%s point:%s value:%v time:%s\n", bucketName, name, value, time.Now().Format("2006-01-02 15:04:05.000"))
 }
 
-handle1 := &Handle1{}
-//申报handler
-call, _ := tor.Register(handle1) //返回一个发布数据的方法
-handle1.call = call
+func (f *FirstScheduler) Syntony(operator *Operator) {
+f.Operator = operator
+}
+
+func (f *FirstScheduler) Switches(bucketName string, name string, value any) {
+fmt.Printf("收到一个随机值变更， bucket:%s point:%s value:%v time:%s\n", bucketName, name, value, time.Now().Format("2006-01-02 15:04:05.000"))
+}
+
+func (f *FirstScheduler) SourceCloed(bucketName string) {
+fmt.Println(bucketName + "closed")
+}
+
 ```
 
 #### 程序内部数据交互的消息总线
