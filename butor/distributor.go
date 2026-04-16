@@ -6,7 +6,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
-	"atomic"
+	"sync/atomic"
 )
 
 const (
