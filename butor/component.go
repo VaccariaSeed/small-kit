@@ -194,4 +194,6 @@ type Scheduler interface {
 	Switches(bucketName string, name string, value any) //订阅的变更值发生了变更
 
 	SourceCloed(bucketName string) // 产生数据订阅的桶被关闭了
+
+	ButorClosed() //数据分发器被关闭了
 }
