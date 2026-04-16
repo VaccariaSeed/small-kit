@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"atomic"
 )
 
 const (
@@ -64,6 +65,22 @@ type Distributor struct {
 	switches     map[string]map[string]*dataSwitch //变值。一般这种值都比较重要，创建时不与桶强绑定
 	sches        sync.Map                          //调度员
 	bufferSize   byte
+	isClosed     atomic.Bool
+}
+
+//关闭
+func (d *Distributor) Close() {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	// 遍历所有键值对
+	d.sches.Range(func(key, value interface{}) bool {
+		d.closeCli(key.(uint64))
+		value.(*cli).sche.ButorClosed()
+		return true // 返回 true 继续遍历，false 则停止
+	})
+	clear(d.valuesSub)
+	clear(d.switches)
+	d.isClosed.Store(true)
 }
 
 // 取消订阅某些变更值
@@ -128,6 +145,9 @@ func (d *Distributor) closeBucket(buckets ...string) {
 
 // 发送一个数据
 func (d *Distributor) release(bucketName string, name string, value any) error {
+	if d.isClosed.Load() == true {
+		return errors.New("distributor closed")
+	}
 	//处理变化值
 	if d.switches[bucketName] != nil && d.switches[bucketName][name] != nil {
 		if sches, ok := d.switches[bucketName][name].flush(value); ok {
