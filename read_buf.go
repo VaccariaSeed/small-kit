@@ -345,7 +345,7 @@ func (b *ReadBuf) Byte(step Step) (byte, error) {
 // 步进指定长度
 func (b *ReadBuf) step(stepFlag Step, stepNum int) {
 	if stepFlag == StepOn {
-		b.index = b.index + stepNum
+		b.index = b.index + stepNum -1
 	}
 }
 
