@@ -68,14 +68,14 @@ type Distributor struct {
 	isClosed     atomic.Bool
 }
 
-//关闭
+// Close 关闭
 func (d *Distributor) Close() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	// 遍历所有键值对
 	d.sches.Range(func(key, value interface{}) bool {
 		d.closeCli(key.(uint64))
-		value.(*cli).sche.ButorClosed()
+		value.(*cli).sche.DistributorClosed()
 		return true // 返回 true 继续遍历，false 则停止
 	})
 	clear(d.valuesSub)
@@ -121,7 +121,7 @@ func (d *Distributor) closeCli(id uint64) {
 		snap.cancel()
 		close(snap.dc)
 		//关闭相关桶
-		d.closeBucket(slices.Collect(maps.Keys(snap.creater))...)
+		d.closeBucket(slices.Collect(maps.Keys(snap.creator))...)
 		d.sches.Delete(id)
 	}
 }
@@ -135,7 +135,7 @@ func (d *Distributor) closeBucket(buckets ...string) {
 			for _, id := range ids {
 				if cl, hasCli := d.sches.Load(id); hasCli {
 					//存在对应客户端
-					cl.(*cli).sche.SourceCloed(bucketName)
+					cl.(*cli).sche.SourceClosed(bucketName)
 				}
 			}
 			d.buckets.Delete(bucketName)
@@ -186,8 +186,8 @@ func (d *Distributor) Register(sche Scheduler) error {
 	//订阅某个桶的某些值
 	//订阅某些桶的所有数据
 	//只有当某个桶的某些值发生变更或者第一次加入时就会发起通知
-	_ = d.createBucket(reg.creater).subValues(reg.subscribe, id).subBucket(reg.subBucket, id).subSwitch(reg.switches, id)
-	sche.Syntony(d.newOperator(id, reg.creater))
+	_ = d.createBucket(reg.creator).subValues(reg.subscribe, id).subBucket(reg.subBucket, id).subSwitch(reg.switches, id)
+	sche.Syntony(d.newOperator(id, reg.creator))
 	cliSnap := newCli(d.bufferSize, sche)
 	cliSnap.Register = reg
 	d.sches.Store(id, cliSnap)
@@ -197,7 +197,7 @@ func (d *Distributor) Register(sche Scheduler) error {
 
 // 创建一个操作器
 func (d *Distributor) newOperator(id uint64, creater map[string]bool) *Operator {
-	return &Operator{release: d.release, Id: id, close: d.closeCli, creater: creater, unsubscribe: d.unsubscribe, unsubscribeValue: d.unsubscribeValue, unsubscribeSwitch: d.unsubscribeSwitch, closeBucket: d.closeBucket, obtain: d.obtain}
+	return &Operator{release: d.release, Id: id, close: d.closeCli, creator: creater, unsubscribe: d.unsubscribe, unsubscribeValue: d.unsubscribeValue, unsubscribeSwitch: d.unsubscribeSwitch, closeBucket: d.closeBucket, obtain: d.obtain}
 }
 
 // 获取某个值的快照值

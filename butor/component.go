@@ -84,7 +84,7 @@ func (id *idGenerator) nextID() uint64 {
 func newRegister() *Register {
 	return &Register{
 		subscribe: make(map[string][]string),
-		creater:   make(map[string]bool),
+		creator:   make(map[string]bool),
 		switches:  make(map[string][]string),
 	}
 }
@@ -93,7 +93,7 @@ func newRegister() *Register {
 type Register struct {
 	subscribe map[string][]string //订阅某个桶的某些值
 	subBucket []string            //订阅某些桶的所有数据
-	creater   map[string]bool     //创建某些桶，bool表示是否保存最新值快照
+	creator   map[string]bool     //创建某些桶，bool表示是否保存最新值快照
 	switches  map[string][]string //只有当某个桶的某些值发生变更或者第一次加入时就会发起通知
 }
 
@@ -115,11 +115,11 @@ func (r *Register) SubscribeBucket(bucketName ...string) {
 	r.subBucket = append(r.subBucket, bucketName...)
 }
 
-// Create 创建一个桶
+// Bind 绑定一个桶
 // bucketName 桶名称
 // snap 该桶是否保留数据的最新值快照
-func (r *Register) Create(bucketName string, snap bool) {
-	r.creater[bucketName] = snap
+func (r *Register) Bind(bucketName string, snap bool) {
+	r.creator[bucketName] = snap
 }
 
 // Operator 操作器
@@ -129,7 +129,7 @@ type Operator struct {
 	release           ReleaseFunc                                       //发送一个数据
 	Id                uint64                                            //操作员id
 	close             func(id uint64)                                   //关闭操作员
-	creater           map[string]bool                                   //自己创建的桶
+	creator           map[string]bool                                   //自己创建的桶
 	unsubscribe       func(id uint64, bucketName ...string)             //取消订阅某个桶
 	unsubscribeValue  func(id uint64, bucketName string, key ...string) // 关闭订阅某个桶的某些数据
 	unsubscribeSwitch func(id uint64, bucketName string, key ...string) //取消订阅变更值
@@ -144,7 +144,7 @@ func (o *Operator) MandatoryObtain(bucketName, key string) (any, error) {
 
 // CloseBucket 关停某个桶
 func (o *Operator) CloseBucket(bucketName string) error {
-	if _, ok := o.creater[bucketName]; !ok {
+	if _, ok := o.creator[bucketName]; !ok {
 		return errors.New("the target bucket was not created by yourself and cannot be deleted")
 	}
 	o.closeBucket(bucketName)
@@ -171,7 +171,7 @@ func (o *Operator) Release(bucketName string, key string, value any) error {
 	if o.isClosed {
 		return errors.New("operator is closed")
 	}
-	if _, ok := o.creater[bucketName]; !ok {
+	if _, ok := o.creator[bucketName]; !ok {
 		return errors.New("the target bucket was not created by ourselves and cannot be written to")
 	}
 	return o.release(bucketName, key, value)
@@ -193,7 +193,7 @@ type Scheduler interface {
 
 	Switches(bucketName string, name string, value any) //订阅的变更值发生了变更
 
-	SourceCloed(bucketName string) // 产生数据订阅的桶被关闭了
+	SourceClosed(bucketName string) // 产生数据订阅的桶被关闭了
 
-	ButorClosed() //数据分发器被关闭了
+	DistributorClosed() //数据分发器被关闭了
 }
